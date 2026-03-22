@@ -1,0 +1,224 @@
+# @genqlient(typename: "Label")
+fragment Label on Label {
+    name
+    id
+    color
+    description
+}
+
+# @genqlient(typename: "PageInfo")
+fragment PageInfo on PageInfo {
+    endCursor
+    hasNextPage
+}
+
+# @genqlient(typename: "PullRequest")
+fragment PullRequest on PullRequest {
+    title
+    id
+    resourcePath
+    permalink
+    url
+    createdAt
+    closed
+    merged
+    number
+    # @genqlient(typename: "PullRequestAuthor")
+    author {
+        login
+    }
+    # @genqlient(typename: "PrLabels")
+    labels(first:100, orderBy: {field: NAME, direction: ASC}){
+        # @genqlient(flatten: true)
+        nodes {
+            ...Label
+        }
+        # @genqlient(flatten: true)
+        pageInfo {
+            ...PageInfo
+        }
+    }
+}
+
+query getPullRequests($owner: String!, $repo: String!, $baseRefName: String!, $labels: [String!], $prAfter: String) {
+    repository(owner: $owner, name: $repo) {
+        # @genqlient(typename: "PullRequestsResult")
+        pullRequests(states:[MERGED,OPEN], baseRefName: $baseRefName, labels: $labels, first:20, after: $prAfter){
+            # @genqlient(flatten: true)
+            nodes {
+                ...PullRequest
+            }
+            # @genqlient(flatten: true)
+            pageInfo {
+                ...PageInfo
+            }
+        }
+    }
+}
+
+mutation AddLabels($prID: ID!, $labelIDs: [ID!]!){
+    # @genqlient(typename: "AddLabelResult")
+    addLabelsToLabelable(input: {labelableId: $prID, labelIds: $labelIDs}){
+        clientMutationId
+    }
+}
+
+mutation RemoveLabels($prID: ID!, $labelIDs: [ID!]!){
+    # @genqlient(typename: "RemoveLabelResult")
+    removeLabelsFromLabelable(input: {labelableId: $prID, labelIds: $labelIDs}){
+        clientMutationId
+    }
+}
+
+mutation CreateRef($repoID: ID!, $oid: GitObjectID!, $name: String!) {
+    # @genqlient(typename: "CreateRefResult")
+    createRef(input: {repositoryId: $repoID, oid: $oid, name: $name}) {
+        # @genqlient(typename: "Ref")
+        ref {
+            id
+            name
+            target {
+                id
+                commitResourcePath
+                oid
+            }
+        }
+    }
+}
+
+fragment CreatePullRequestFields on CreatePullRequestPayload {
+    # @genqlient(flatten: true)
+    pullRequest {
+        ...PullRequest
+    }
+}
+
+mutation CreatePullRequest(
+    $baseRefName: String!,
+    $body: String,
+    $headRefName: String!,
+    $repositoryId: ID!
+    $title: String!
+) {
+    # @genqlient(typename: "CreatePullRequestResult")
+    # @genqlient(flatten: true)
+    createPullRequest(input: {
+        repositoryId: $repositoryId,
+        baseRefName: $baseRefName,
+        headRefName: $headRefName,
+        title: $title
+        body: $body,
+    }) {
+        ...CreatePullRequestFields
+    }
+}
+
+mutation ClosePullRequest($prID: ID!){
+    closePullRequest(input: {pullRequestId: $prID}) {
+        clientMutationId
+    }
+}
+
+query GetRepo($owner: String!, $repo: String!) {
+    repository(owner: $owner, name: $repo) {
+        id
+        # @genqlient(typename: "RepoLabels")
+        labels(first: 100, orderBy: {field: NAME, direction: ASC}) {
+            nodes {
+                ...Label
+                # the quantity of pull requests using this label
+                pullRequests(first:1) {
+                    totalCount
+                }
+            }
+        }
+    }
+}
+
+query GetPullRequest($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+        pullRequest(number: $number){
+            ...PullRequest
+            labels(first: 100, orderBy: {field: NAME, direction: ASC}) {
+                # @genqlient(flatten: true)
+                nodes {
+                    ...Label
+                }
+            }
+        }
+    }
+}
+
+mutation CreateLabel($repoID: ID!, $color: String!, $name: String!, $description: String) {
+    createLabel(input: {
+        repositoryId: $repoID
+        color: $color
+        name: $name
+        description: $description
+    }){
+        label {
+            id
+        }
+    }
+}
+
+mutation DeleteLabel($id: ID!) {
+    deleteLabel(input: {
+        id: $id
+    }){
+        clientMutationId
+    }
+}
+
+# @genqlient(typename: "Release")
+fragment Release on Release {
+    id
+    name
+    tagName
+    createdAt
+    publishedAt
+    description
+    url
+}
+
+query getReleases($owner: String!, $repo: String!, $pageSize: Int!, $after: String) {
+    repository(owner: $owner, name: $repo) {
+        releases(first: $pageSize, after: $after, orderBy: {direction: DESC, field: NAME}) {
+            # @genqlient(flatten: true)
+            pageInfo{
+                ...PageInfo
+            }
+            # @genqlient(flatten: true)
+            nodes {
+                ...Release
+            }
+        }
+    }
+}
+
+# @genqlient(typename: "Ref")
+fragment Ref on Ref {
+    id
+    name
+    target {
+        oid
+    }
+}
+
+query getTags($owner: String!, $repo: String!, $pageSize: Int!, $after: String) {
+    repository(owner: $owner, name: $repo) {
+        refs(first: $pageSize, after: $after, refPrefix: "refs/tags/", orderBy: {direction: DESC, field: TAG_COMMIT_DATE}) {
+            # @genqlient(flatten: true)
+            pageInfo{
+                ...PageInfo
+            }
+            # @genqlient(flatten: true)
+            nodes {
+                ...Ref
+            }
+        }
+    }
+}
+
+
+
