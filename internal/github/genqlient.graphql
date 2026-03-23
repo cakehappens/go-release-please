@@ -40,10 +40,10 @@ fragment PullRequest on PullRequest {
     }
 }
 
-query getPullRequests($owner: String!, $repo: String!, $baseRefName: String!, $labels: [String!], $prAfter: String) {
+query getPullRequests($owner: String!, $repo: String!, $baseRefName: String!, $labels: [String!], $pageSize: Int!, $prAfter: String) {
     repository(owner: $owner, name: $repo) {
         # @genqlient(typename: "PullRequestsResult")
-        pullRequests(states:[MERGED,OPEN], baseRefName: $baseRefName, labels: $labels, first:20, after: $prAfter){
+        pullRequests(states:[MERGED,OPEN], baseRefName: $baseRefName, labels: $labels, first:$pageSize, after: $prAfter){
             # @genqlient(flatten: true)
             nodes {
                 ...PullRequest

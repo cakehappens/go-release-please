@@ -8,9 +8,12 @@ import (
 
 	"charm.land/log/v2"
 	"github.com/Khan/genqlient/graphql"
+	gogit "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/peterbourgon/ff/v4"
 	"github.com/peterbourgon/ff/v4/ffval"
 
+	"github.com/cakehappens/go-release-please/internal/git"
 	"github.com/cakehappens/go-release-please/internal/github"
 )
 
@@ -57,6 +60,8 @@ func (t *authedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 const (
+	LabelKey = "label"
+
 	LabelAutoReleasePending   = "autorelease: pending"
 	LabelAutoReleasePublished = "autorelease: published"
 )
@@ -71,17 +76,23 @@ func (cfg *Config) Exec(ctx context.Context, args []string) error {
 	graphqlClient := graphql.NewClient("https://api.github.com/graphql", &httpClient)
 	log.WithPrefix("📝 ").Info(
 		"Getting Pull Requests with label...",
-		"label", LabelAutoReleasePending)
+		LabelKey, LabelAutoReleasePending)
 
 	owner := "googleapis"
-	repo := "release-please"
-	_, err := github.GetPullRequests(ctx, graphqlClient, github.GetPullRequestsInput{
+	repoShort := "release-please"
+	prs, err := github.GetPullRequests(ctx, graphqlClient, github.GetPullRequestsInput{
 		Owner:  owner,
-		Repo:   repo,
+		Repo:   repoShort,
 		Labels: []string{LabelAutoReleasePending},
+		Limit:  20,
 	})
 	if err != nil {
 		return fmt.Errorf("getting pull requests: %w", err)
+	}
+
+	if len(prs) == 0 {
+		log.Info("No pull requests found with", LabelKey, LabelAutoReleasePending)
+		log.Info("Desire: Create a new pull request for the next release (if applicable)")
 	}
 
 	// get Releases
@@ -89,15 +100,76 @@ func (cfg *Config) Exec(ctx context.Context, args []string) error {
 	log.WithPrefix("🚀 ").Info("Getting Releases...")
 	_, err = github.GetReleases(ctx, graphqlClient, github.GetReleasesInput{
 		Owner: owner,
-		Repo:  repo,
+		Repo:  repoShort,
+		Limit: 20,
 	})
 
 	// get Tags
 	log.WithPrefix("🏷️ ").Info("Getting Tags...")
-	_, err = github.GetTags(ctx, graphqlClient, github.GetTagsInput{
+	tags, err := github.GetTags(ctx, graphqlClient, github.GetTagsInput{
 		Owner: owner,
-		Repo:  repo,
+		Repo:  repoShort,
+		Limit: 20,
 	})
+
+	// get commits
+	latest := tags[len(tags)-1]
+	targetOid := latest.Target.GetOid()
+	log.Info("found latest tag", "tag", latest.Name, "target", targetOid)
+	latestOid, ok := plumbing.FromHex(targetOid)
+	if !ok {
+		return fmt.Errorf("failed to convert tagged commit %q to objectID", targetOid)
+	}
+
+	repoPath, err := git.RepoPath()
+	if err != nil {
+		return fmt.Errorf("getting root of repo")
+	}
+
+	currentHead, err := git.RevParseHEAD(repoPath)
+	if err != nil {
+		return fmt.Errorf("getting HEAD")
+	}
+
+	repo, err := gogit.PlainOpen(repoPath)
+	if err != nil {
+		return fmt.Errorf("opening local repo at %q: %w", repoPath, err)
+	}
+
+	history, err := git.RevListAncestryPath(repoPath, repo, latestOid, currentHead)
+	if err != nil {
+		return fmt.Errorf("performing git rev-list --ancestry-path: %w", err)
+	}
+
+	historyCommits, err := git.ToCommitObj(repo, history...)
+	if len(historyCommits) > 0 {
+		log.Info("Found commits!")
+	} else {
+		log.Info("No history between current HEAD and latest tag",
+			"HEAD", currentHead,
+			"tag", latest.Name,
+			"tag-target", latestOid,
+		)
+	}
+
+	for _, c := range historyCommits {
+		convCommit := git.ParseConventionalCommit(c.Message)
+		commitHashShort := c.Hash.String()[0:8]
+
+		commitLogger := log.With("valid", convCommit.IsValid())
+		if convCommit.IsValid() {
+			commitLogger.Info(commitHashShort,
+				"type", convCommit.Type,
+				"scope", convCommit.Scope,
+				"breaking", convCommit.Breaking,
+				"description", convCommit.Description,
+			)
+		} else {
+			commitLogger.Info(commitHashShort,
+				"header", convCommit.RAWHeader,
+			)
+		}
+	}
 
 	return nil
 }

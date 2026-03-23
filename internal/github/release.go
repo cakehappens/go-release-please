@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
@@ -63,12 +64,22 @@ func NewReleaseTx(client *github.Client, owner, repo string, release *github.Rep
 }
 
 type GetReleasesInput struct {
-	Owner string
-	Repo  string
+	Owner    string
+	Repo     string
+	Limit    int
+	PageSize int
 }
 
 func GetReleases(ctx context.Context, client graphql.Client, in GetReleasesInput) ([]Release, error) {
 	var releases []Release
+
+	if in.Limit == 0 {
+		in.Limit = math.MaxInt
+	}
+
+	if in.PageSize == 0 {
+		in.PageSize = 100
+	}
 
 	logger := log.Default().With()
 	styles := log.DefaultStyles()
@@ -79,7 +90,11 @@ func GetReleases(ctx context.Context, client graphql.Client, in GetReleasesInput
 
 	after := ""
 	for {
-		resp, err := getReleases(ctx, client, in.Owner, in.Repo, 10, after)
+		if len(releases) >= in.Limit {
+			break
+		}
+
+		resp, err := getReleases(ctx, client, in.Owner, in.Repo, in.PageSize, after)
 		if err != nil {
 			return nil, err
 		}

@@ -1409,6 +1409,7 @@ type __getPullRequestsInput struct {
 	Repo        string   `json:"repo"`
 	BaseRefName string   `json:"baseRefName"`
 	Labels      []string `json:"labels"`
+	PageSize    int      `json:"pageSize"`
 	PrAfter     string   `json:"prAfter"`
 }
 
@@ -1423,6 +1424,9 @@ func (v *__getPullRequestsInput) GetBaseRefName() string { return v.BaseRefName 
 
 // GetLabels returns __getPullRequestsInput.Labels, and is useful for accessing the field via an interface.
 func (v *__getPullRequestsInput) GetLabels() []string { return v.Labels }
+
+// GetPageSize returns __getPullRequestsInput.PageSize, and is useful for accessing the field via an interface.
+func (v *__getPullRequestsInput) GetPageSize() int { return v.PageSize }
 
 // GetPrAfter returns __getPullRequestsInput.PrAfter, and is useful for accessing the field via an interface.
 func (v *__getPullRequestsInput) GetPrAfter() string { return v.PrAfter }
@@ -2005,9 +2009,9 @@ func RemoveLabels(
 
 // The query executed by getPullRequests.
 const getPullRequests_Operation = `
-query getPullRequests ($owner: String!, $repo: String!, $baseRefName: String!, $labels: [String!], $prAfter: String) {
+query getPullRequests ($owner: String!, $repo: String!, $baseRefName: String!, $labels: [String!], $pageSize: Int!, $prAfter: String) {
 	repository(owner: $owner, name: $repo) {
-		pullRequests(states: [MERGED,OPEN], baseRefName: $baseRefName, labels: $labels, first: 20, after: $prAfter) {
+		pullRequests(states: [MERGED,OPEN], baseRefName: $baseRefName, labels: $labels, first: $pageSize, after: $prAfter) {
 			nodes {
 				... PullRequest
 			}
@@ -2059,6 +2063,7 @@ func getPullRequests(
 	repo string,
 	baseRefName string,
 	labels []string,
+	pageSize int,
 	prAfter string,
 ) (data_ *getPullRequestsResponse, err_ error) {
 	req_ := &graphql.Request{
@@ -2069,6 +2074,7 @@ func getPullRequests(
 			Repo:        repo,
 			BaseRefName: baseRefName,
 			Labels:      labels,
+			PageSize:    pageSize,
 			PrAfter:     prAfter,
 		},
 	}

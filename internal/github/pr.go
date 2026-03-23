@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -84,10 +85,20 @@ type GetPullRequestsInput struct {
 	Repo        string
 	BaseRefName string
 	Labels      []string
+	Limit       int
+	PageSize    int
 }
 
 func GetPullRequests(ctx context.Context, client graphql.Client, in GetPullRequestsInput) ([]PullRequest, error) {
 	var prs []PullRequest
+
+	if in.Limit == 0 {
+		in.Limit = math.MaxInt
+	}
+
+	if in.PageSize == 0 {
+		in.PageSize = 100
+	}
 
 	logger := log.Default().With()
 	styles := log.DefaultStyles()
@@ -103,7 +114,10 @@ func GetPullRequests(ctx context.Context, client graphql.Client, in GetPullReque
 
 	prAfter := ""
 	for {
-		resp, err := getPullRequests(ctx, client, in.Owner, in.Repo, baseRefName, in.Labels, prAfter)
+		if len(prs) >= in.Limit {
+			break
+		}
+		resp, err := getPullRequests(ctx, client, in.Owner, in.Repo, baseRefName, in.Labels, in.PageSize, prAfter)
 		if err != nil {
 			return nil, err
 		}
