@@ -43,30 +43,38 @@ func ParseConventionalCommit(val string) *ConventionalCommit {
 		Trailers:  make(map[string]string),
 	}
 
-	{
-		match := conventionalCommitRegex.FindStringSubmatch(headerLine)
-		for i, name := range conventionalCommitRegex.SubexpNames() {
-			if i != 0 && name != "" {
-				switch name {
-				case "type":
-					convCommit.Type = match[i]
-				case "scope":
-					convCommit.Scope = match[i]
-				case "breaking":
-					if match[i] == "!" {
-						convCommit.Breaking = true
-					}
-				case "description":
-					convCommit.Description = match[i]
-				}
-			}
-		}
-	}
+	parseHeader(convCommit, headerLine)
 
 	if len(msgLines) > 1 {
 		msgLines = msgLines[1:]
 	}
 
+	parseFooters(convCommit, msgLines)
+
+	return convCommit
+}
+
+func parseHeader(c *ConventionalCommit, header string) {
+	match := conventionalCommitRegex.FindStringSubmatch(header)
+	for i, name := range conventionalCommitRegex.SubexpNames() {
+		if i != 0 && name != "" {
+			switch name {
+			case "type":
+				c.Type = match[i]
+			case "scope":
+				c.Scope = match[i]
+			case "breaking":
+				if match[i] == "!" {
+					c.Breaking = true
+				}
+			case "description":
+				c.Description = match[i]
+			}
+		}
+	}
+}
+
+func parseFooters(c *ConventionalCommit, msgLines []string) {
 	lastIndexToRemove := -1
 	for i := len(msgLines) - 1; i >= 0; i-- {
 		line := msgLines[i]
@@ -88,7 +96,7 @@ func ParseConventionalCommit(val string) *ConventionalCommit {
 		}
 
 		if key != "" && value != "" {
-			convCommit.Trailers[key] = value
+			c.Trailers[key] = value
 		}
 	}
 
@@ -96,7 +104,9 @@ func ParseConventionalCommit(val string) *ConventionalCommit {
 		msgLines = msgLines[:lastIndexToRemove]
 	}
 
-	convCommit.Body = strings.Join(msgLines, "\n")
+	if _, ok := c.Trailers["BREAKING CHANGE"]; ok {
+		c.Breaking = true
+	}
 
-	return convCommit
+	c.Body = strings.Join(msgLines, "\n")
 }
