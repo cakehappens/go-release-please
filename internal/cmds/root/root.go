@@ -141,18 +141,16 @@ func (cfg *Config) Exec(ctx context.Context, args []string) error {
 		return fmt.Errorf("performing git rev-list --ancestry-path: %w", err)
 	}
 
-	historyCommits, err := git.ToCommitObj(repo, history...)
-	if len(historyCommits) > 0 {
-		log.Info("Found commits!")
-	} else {
-		log.Info("No history between current HEAD and latest tag",
+	commitHistory, err := git.ToCommitObj(repo, history...)
+	if len(commitHistory) == 0 {
+		log.Info("No ancestral commits between current HEAD and latest tag",
 			"HEAD", currentHead,
-			"tag", latest.Name,
+			"tag-name", latest.Name,
 			"tag-target", latestOid,
 		)
 	}
 
-	for _, c := range historyCommits {
+	for _, c := range commitHistory {
 		convCommit := git.ParseConventionalCommit(c.Message)
 		commitHashShort := c.Hash.String()[0:8]
 

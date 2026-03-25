@@ -28,11 +28,12 @@ func (c *ConventionalCommit) IsValid() bool {
 	return true
 }
 
+// https://www.conventionalcommits.org/en/v1.0.0/
 var conventionalCommitRegex = regexp.MustCompile("^(?P<type>build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\\((?P<scope>[\\w\\-.]+)\\))?(?P<breaking>!)?: (?P<description>[\\w ]+[\\s\\S]*)$")
 
 // https://git-scm.com/docs/git-interpret-trailers
-// (<key>|<key-alias>)[(=|:)<value>])
-var trailerRegex = regexp.MustCompile("^(?P<key>[\\w\\-.]+)([=:])\\s*(?P<value>[\\w ]+[\\s\\S]*)$")
+// (<key>|<key-alias>): <value>
+var trailerRegex = regexp.MustCompile("^(?P<key>[\\w\\-.]+): (?P<value>[\\w ]+[\\s\\S]*)$")
 
 func ParseConventionalCommit(val string) *ConventionalCommit {
 	msgLines := strings.Split(val, "\n")
@@ -104,9 +105,28 @@ func parseFooters(c *ConventionalCommit, msgLines []string) {
 		msgLines = msgLines[:lastIndexToRemove]
 	}
 
-	if _, ok := c.Trailers["BREAKING CHANGE"]; ok {
+	if trailersHasBreakingChange(c.Trailers) {
 		c.Breaking = true
 	}
 
 	c.Body = strings.Join(msgLines, "\n")
+}
+
+// https://www.conventionalcommits.org/en/v1.0.0/
+// see specification #16 both of these must be allowed
+const (
+	BreakingChangeSpace  = "BREAKING CHANGE"
+	BreakingChangeHyphen = "BREAKING-CHANGE"
+)
+
+func trailersHasBreakingChange(trailers map[string]string) bool {
+	if _, ok := trailers[BreakingChangeSpace]; ok {
+		return true
+	}
+
+	if _, ok := trailers[BreakingChangeHyphen]; ok {
+		return true
+	}
+
+	return false
 }
